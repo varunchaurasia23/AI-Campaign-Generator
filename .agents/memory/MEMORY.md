@@ -1,0 +1,2 @@
+- [Zod v4 codegen compat](zod-v4-codegen.md) — Orval generates zod v4 APIs; fix by post-processing the import in codegen script and adding tsconfig paths alias.
+- [Express session d.ts](express-session-dts.md) — Session type augmentation via .d.ts can't be imported directly (esbuild fails); rely on tsconfig include instead.
