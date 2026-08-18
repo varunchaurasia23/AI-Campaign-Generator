@@ -3,20 +3,23 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: AI Campaign Generator API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: campaigns
+    description: Campaign intake and results
+  - name: admin
+    description: Admin dashboard operations
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +27,218 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /campaigns:
+    post:
+      operationId: submitCampaign
+      tags: [campaigns]
+      summary: Submit intake form and generate campaign
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CampaignInput"
+      responses:
+        "201":
+          description: Campaign created and processed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CampaignSubmitResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /campaigns/{id}:
+    get:
+      operationId: getCampaign
+      tags: [campaigns]
+      summary: Get campaign result by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Campaign found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CampaignDetail"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/login:
+    post:
+      operationId: adminLogin
+      tags: [admin]
+      summary: Admin login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminLoginInput"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminAuthResponse"
+        "401":
+          description: Invalid password
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/logout:
+    post:
+      operationId: adminLogout
+      tags: [admin]
+      summary: Admin logout
+      responses:
+        "200":
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminAuthResponse"
+
+  /admin/me:
+    get:
+      operationId: adminMe
+      tags: [admin]
+      summary: Check admin auth status
+      responses:
+        "200":
+          description: Authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminAuthResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/campaigns:
+    get:
+      operationId: adminListCampaigns
+      tags: [admin]
+      summary: List all campaigns (admin)
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [processing, complete, failed]
+        - name: sortBy
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [createdAt, budget, fitScore]
+        - name: sortOrder
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [asc, desc]
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of campaigns
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminCampaignListResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/campaigns/{id}:
+    get:
+      operationId: adminGetCampaign
+      tags: [admin]
+      summary: Get full campaign detail (admin)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Campaign detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminCampaignDetail"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/stats:
+    get:
+      operationId: adminGetStats
+      tags: [admin]
+      summary: Get dashboard summary stats
+      responses:
+        "200":
+          description: Stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminStats"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +249,337 @@ components:
       required:
         - status
 
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    CampaignInput:
+      type: object
+      required:
+        - fullName
+        - email
+        - companyName
+        - productDescription
+        - targetAudience
+        - budget
+      properties:
+        fullName:
+          type: string
+          minLength: 1
+        email:
+          type: string
+          format: email
+        companyName:
+          type: string
+          minLength: 1
+        website:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        productDescription:
+          type: string
+          minLength: 10
+        targetAudience:
+          type: string
+          minLength: 5
+        budget:
+          type: number
+          minimum: 1
+
+    ChannelAllocation:
+      type: object
+      required:
+        - channel
+        - percentage
+        - amount
+      properties:
+        channel:
+          type: string
+        percentage:
+          type: number
+        amount:
+          type: number
+
+    ABTestVariant:
+      type: object
+      required:
+        - angle
+        - type
+        - hypothesis
+        - primaryMetric
+      properties:
+        angle:
+          type: string
+        type:
+          type: string
+        hypothesis:
+          type: string
+        primaryMetric:
+          type: string
+
+    ABTestPlanItem:
+      type: object
+      required:
+        - channel
+        - variantA
+        - variantB
+      properties:
+        channel:
+          type: string
+        variantA:
+          $ref: "#/components/schemas/ABTestVariant"
+        variantB:
+          $ref: "#/components/schemas/ABTestVariant"
+
+    CampaignIdea:
+      type: object
+      required:
+        - title
+        - description
+        - rationale
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        rationale:
+          type: string
+
+    AdCopyItem:
+      type: object
+      required:
+        - channel
+        - headline
+        - body
+        - callToAction
+      properties:
+        channel:
+          type: string
+        headline:
+          type: string
+        body:
+          type: string
+        callToAction:
+          type: string
+
+    CampaignResult:
+      type: object
+      required:
+        - channelMix
+        - budgetAllocation
+        - abTestPlan
+        - fitScore
+      properties:
+        channelMix:
+          type: array
+          items:
+            type: string
+        budgetAllocation:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChannelAllocation"
+        abTestPlan:
+          type: array
+          items:
+            $ref: "#/components/schemas/ABTestPlanItem"
+        campaignIdeas:
+          type: ["array", "null"]
+          items:
+            $ref: "#/components/schemas/CampaignIdea"
+        adCopy:
+          type: ["array", "null"]
+          items:
+            $ref: "#/components/schemas/AdCopyItem"
+        fitScore:
+          type: integer
+        riskLevel:
+          type: ["string", "null"]
+          description: "Deterministic risk assessment: low / medium / high"
+        errorMessage:
+          type: ["string", "null"]
+
+    CampaignDetail:
+      type: object
+      required:
+        - id
+        - status
+        - budget
+        - createdAt
+      properties:
+        id:
+          type: integer
+        status:
+          type: string
+          enum: [processing, complete, failed]
+        budget:
+          type: number
+        productDescription:
+          type: string
+        targetAudience:
+          type: string
+        createdAt:
+          type: string
+        result:
+          $ref: "#/components/schemas/CampaignResult"
+
+    CampaignSubmitResponse:
+      type: object
+      required:
+        - campaignId
+        - status
+      properties:
+        campaignId:
+          type: integer
+        status:
+          type: string
+          enum: [processing, complete, failed]
+        result:
+          $ref: "#/components/schemas/CampaignResult"
+
+    AdminLoginInput:
+      type: object
+      required:
+        - password
+      properties:
+        password:
+          type: string
+
+    AdminAuthResponse:
+      type: object
+      required:
+        - authenticated
+      properties:
+        authenticated:
+          type: boolean
+
+    AdminCampaignListItem:
+      type: object
+      required:
+        - id
+        - leadName
+        - companyName
+        - budget
+        - status
+        - createdAt
+      properties:
+        id:
+          type: integer
+        leadName:
+          type: string
+        companyName:
+          type: string
+        budget:
+          type: number
+        status:
+          type: string
+          enum: [processing, complete, failed]
+        fitScore:
+          type: ["integer", "null"]
+        riskLevel:
+          type: ["string", "null"]
+          description: "Deterministic risk assessment: low / medium / high"
+        createdAt:
+          type: string
+
+    AdminCampaignListResponse:
+      type: object
+      required:
+        - campaigns
+        - total
+      properties:
+        campaigns:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminCampaignListItem"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+
+    AdminCampaignDetail:
+      type: object
+      required:
+        - id
+        - leadName
+        - leadEmail
+        - companyName
+        - budget
+        - productDescription
+        - targetAudience
+        - status
+        - createdAt
+      properties:
+        id:
+          type: integer
+        leadName:
+          type: string
+        leadEmail:
+          type: string
+        companyName:
+          type: string
+        website:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        budget:
+          type: number
+        productDescription:
+          type: string
+        targetAudience:
+          type: string
+        status:
+          type: string
+          enum: [processing, complete, failed]
+        createdAt:
+          type: string
+        result:
+          $ref: "#/components/schemas/CampaignResult"
+        rawAiResponse:
+          type: ["string", "null"]
+
+    AdminStats:
+      type: object
+      required:
+        - totalSubmissions
+        - completionRate
+        - averageBudget
+        - topChannels
+        - statusBreakdown
+      properties:
+        totalSubmissions:
+          type: integer
+        completionRate:
+          type: number
+        averageBudget:
+          type: number
+        topChannels:
+          type: array
+          items:
+            type: object
+            required:
+              - channel
+              - count
+            properties:
+              channel:
+                type: string
+              count:
+                type: integer
+        statusBreakdown:
+          type: object
+          required:
+            - processing
+            - complete
+            - failed
+          properties:
+            processing:
+              type: integer
+            complete:
+              type: integer
+            failed:
+              type: integer

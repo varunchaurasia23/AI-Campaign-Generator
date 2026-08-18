@@ -5,7 +5,11 @@
     "declarationMap": true,
     "emitDeclarationOnly": true,
     "outDir": "dist",
-    "rootDir": "src"
+    "rootDir": "src",
+    "paths": {
+      "zod": ["./node_modules/zod/v4"],
+      "zod/*": ["./node_modules/zod/v4/*"]
+    }
   },
   "include": ["src"]
 }
