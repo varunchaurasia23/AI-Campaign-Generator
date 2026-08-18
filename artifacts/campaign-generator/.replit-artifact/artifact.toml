@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "AI Campaign Generator"
+description = "A marketing workflow automation platform where marketers submit campaign inputs via a public intake form, get AI-powered campaign ideas with smart channel selection and budget allocation, and admins can review all submissions via a password-protected dashboard."
+version = "1.0.0"
+id = "artifacts/campaign-generator"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 18521
+
+[services.development]
+run = "pnpm --filter @workspace/campaign-generator run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/campaign-generator", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/campaign-generator/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "18521"
+BASE_PATH = "/"
