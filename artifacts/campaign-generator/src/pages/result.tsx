@@ -84,7 +84,7 @@ export default function ResultsPage() {
           <div className="flex items-center gap-3 mb-2">
             <Badge variant="success" className="gap-1.5"><CheckCircle2 className="w-3.5 h-3.5"/> Complete</Badge>
             <span className="text-sm font-mono text-muted-foreground">ID: {campaign.id}</span>
-            <span className="text-sm font-mono text-muted-foreground">BUDGET: ${campaign.budget.toLocaleString()}</span>
+            <span className="text-sm font-mono text-muted-foreground">BUDGET: ₹{campaign.budget.toLocaleString("en-IN")}</span>
           </div>
           <h1 className="text-3xl md:text-4xl font-bold tracking-tight">Campaign Strategy Report</h1>
           <p className="text-muted-foreground mt-2 max-w-2xl">
@@ -130,7 +130,7 @@ export default function ResultsPage() {
                 <div key={idx} className="space-y-2">
                   <div className="flex justify-between items-center text-sm">
                     <span className="font-medium">{alloc.channel}</span>
-                    <span className="font-mono text-muted-foreground">${alloc.amount.toLocaleString()}</span>
+                    <span className="font-mono text-muted-foreground">₹{alloc.amount.toLocaleString("en-IN")}</span>
                   </div>
                   <div className="flex items-center gap-3">
                     <Progress value={alloc.percentage} className="h-2 bg-muted/50" />

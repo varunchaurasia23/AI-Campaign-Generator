@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Spinner } from "@/components/ui/spinner"
 import { useSubmitCampaign } from "@workspace/api-client-react"
 import { useToast } from "@/hooks/use-toast"
-import { Zap, Briefcase, Target, DollarSign, User, Mail, Globe, Phone } from "lucide-react"
+import { Zap, Briefcase, Target, User, Mail, Globe, Phone } from "lucide-react"
 
 const intakeSchema = z.object({
   fullName: z.string().min(1, "Full name is required"),
@@ -20,7 +20,7 @@ const intakeSchema = z.object({
   phone: z.string().optional().or(z.literal("")),
   productDescription: z.string().min(10, "Must be at least 10 characters"),
   targetAudience: z.string().min(5, "Must be at least 5 characters"),
-  budget: z.coerce.number().min(1, "Budget must be at least $1"),
+  budget: z.coerce.number().min(1, "Budget must be at least ₹1"),
 })
 
 type IntakeValues = z.infer<typeof intakeSchema>
@@ -215,7 +215,7 @@ export default function IntakePage() {
                       name="budget"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel className="flex items-center gap-2"><DollarSign className="w-3.5 h-3.5"/> Monthly Budget ($)</FormLabel>
+                          <FormLabel className="flex items-center gap-2">Monthly Budget (₹)</FormLabel>
                           <FormControl>
                             <Input type="number" min={1} {...field} className="bg-background/50 font-mono" />
                           </FormControl>

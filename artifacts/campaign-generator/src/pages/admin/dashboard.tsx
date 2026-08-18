@@ -135,7 +135,7 @@ export default function AdminDashboard() {
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold data-mono">
-                ${Math.round(stats.averageBudget).toLocaleString()}
+                ₹{Math.round(stats.averageBudget).toLocaleString("en-IN")}
               </div>
             </CardContent>
           </Card>
@@ -213,7 +213,7 @@ export default function AdminDashboard() {
                       <div className="font-medium">{camp.leadName}</div>
                       <div className="text-xs text-muted-foreground">{camp.companyName}</div>
                     </TableCell>
-                    <TableCell className="font-mono">${camp.budget.toLocaleString()}</TableCell>
+                    <TableCell className="font-mono">₹{camp.budget.toLocaleString("en-IN")}</TableCell>
                     <TableCell>
                       <Badge variant={camp.status === 'complete' ? 'success' : camp.status === 'failed' ? 'destructive' : 'processing'}>
                         {camp.status.toUpperCase()}
