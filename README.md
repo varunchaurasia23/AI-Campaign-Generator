@@ -82,7 +82,7 @@ The API server listens on the port set by the `PORT` environment variable. The f
 ## Links
 
 - **GitHub:** https://github.com/varunchaurasia23/AI-Campaign-Generator
-- **Live app:** *(deployed on Replit — see the Replit workspace for the current preview URL)*
+- **Live app:** https://campaign-automation-platform.replit.app
 
 ---
 
