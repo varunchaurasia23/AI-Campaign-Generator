@@ -44,6 +44,24 @@ export function setAuthTokenGetter(getter: AuthTokenGetter | null): void {
   _authTokenGetter = getter;
 }
 
+// ---------------------------------------------------------------------------
+// CSRF — double-submit cookie auto-injection
+// ---------------------------------------------------------------------------
+
+/**
+ * Read the `_csrf` cookie value set by the server's CSRF middleware.
+ * Returns null in non-browser environments (SSR, tests, Expo).
+ */
+function readCsrfCookie(): string | null {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie.match(/(?:^|;\s*)_csrf=([^;]*)/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+// ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
+
 function isRequest(input: RequestInfo | URL): input is Request {
   return typeof Request !== "undefined" && input instanceof Request;
 }
@@ -322,6 +340,9 @@ async function parseSuccessBody(
   }
 }
 
+// State-changing methods that require a CSRF token
+const CSRF_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
 export async function customFetch<T = unknown>(
   input: RequestInfo | URL,
   options: CustomFetchOptions = {},
@@ -358,9 +379,22 @@ export async function customFetch<T = unknown>(
     }
   }
 
+  // ── CSRF: auto-inject the double-submit cookie token as a header ──────────
+  // On all state-changing requests (POST/PUT/PATCH/DELETE), read the `_csrf`
+  // cookie set by the server's CSRF middleware and echo it back as the
+  // `X-CSRF-Token` header.  The server validates that the header matches the
+  // cookie, preventing cross-site request forgery (a cross-origin attacker
+  // cannot read the cookie, so they cannot supply the matching header).
+  if (CSRF_METHODS.has(method) && !headers.has("x-csrf-token")) {
+    const csrfToken = readCsrfCookie();
+    if (csrfToken) {
+      headers.set("x-csrf-token", csrfToken);
+    }
+  }
+
   const requestInfo = { method, url: resolveUrl(input) };
 
-  const response = await fetch(input, { ...init, method, headers });
+  const response = await fetch(input, { ...init, method, headers, credentials: "include" });
 
   if (!response.ok) {
     const errorData = await parseErrorBody(response, method);

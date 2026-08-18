@@ -100,6 +100,10 @@ async function buildAll() {
       "puppeteer",
       "puppeteer-core",
       "electron",
+      // connect-pg-simple reads table.sql via __dirname at runtime; bundling
+      // it changes __dirname to dist/ where the SQL file doesn't exist.
+      // Externalising keeps its __dirname pointing at its own package directory.
+      "connect-pg-simple",
     ],
     sourcemap: "linked",
     plugins: [

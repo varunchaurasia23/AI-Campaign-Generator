@@ -5,27 +5,21 @@ import { defineConfig } from 'vite';
 
 import runtimeErrorOverlay from '@replit/vite-plugin-runtime-error-modal';
 
-const rawPort = process.env.PORT;
-
-if (!rawPort) {
-  throw new Error(
-    'PORT environment variable is required but was not provided.',
-  );
-}
-
+// PORT is only used by the dev server (vite dev) and the preview server
+// (vite preview).  `vite build` is a pure compilation step that produces
+// static assets and never opens a port, so a missing PORT must not fail
+// the build.  We default to 3000 so production build steps (which only
+// run `vite build`, not `vite dev`) succeed without manual env injection.
+const rawPort = process.env.PORT ?? "3000";
 const port = Number(rawPort);
-
 if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-const basePath = process.env.BASE_PATH;
-
-if (!basePath) {
-  throw new Error(
-    'BASE_PATH environment variable is required but was not provided.',
-  );
-}
+// BASE_PATH is needed both at dev time (sets the base URL prefix) and at
+// build time (baked into asset references).  Default to "/" which is the
+// production value set in artifact.toml [services.env].
+const basePath = process.env.BASE_PATH ?? "/";
 
 export default defineConfig({
   base: basePath,

@@ -1,12 +1,13 @@
 import { z } from "zod"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
+import { useEffect } from "react"
 import { useLocation } from "wouter"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { useAdminLogin } from "@workspace/api-client-react"
+import { useAdminLogin, useAdminMe, getAdminMeQueryKey } from "@workspace/api-client-react"
 import { useToast } from "@/hooks/use-toast"
 import { Lock, ShieldAlert } from "lucide-react"
 import { Spinner } from "@/components/ui/spinner"
@@ -18,7 +19,25 @@ const loginSchema = z.object({
 export default function AdminLogin() {
   const [, setLocation] = useLocation()
   const { toast } = useToast()
-  
+
+  // Check existing session AND seed the CSRF cookie.
+  // GET /admin/me calls setCsrfCookie middleware on the server, so by the time
+  // the user submits the login form the _csrf cookie is already present and
+  // customFetch will automatically include it as X-CSRF-Token.
+  const { data: auth, isLoading: authLoading } = useAdminMe({
+    query: {
+      retry: false,
+      queryKey: getAdminMeQueryKey(),
+    },
+  })
+
+  // Redirect immediately if already authenticated
+  useEffect(() => {
+    if (auth?.authenticated) {
+      setLocation("/admin")
+    }
+  }, [auth, setLocation])
+
   const form = useForm<z.infer<typeof loginSchema>>({
     resolver: zodResolver(loginSchema),
     defaultValues: { password: "" },
@@ -44,6 +63,16 @@ export default function AdminLogin() {
           form.reset()
         },
       }
+    )
+  }
+
+  // While checking existing session, show a spinner rather than the form
+  // so the CSRF cookie has time to arrive before the user can submit.
+  if (authLoading) {
+    return (
+      <div className="w-full min-h-[80vh] flex items-center justify-center">
+        <Spinner size={32} />
+      </div>
     )
   }
 
@@ -81,9 +110,9 @@ export default function AdminLogin() {
                     </FormItem>
                   )}
                 />
-                <Button 
-                  type="submit" 
-                  className="w-full electric-glow" 
+                <Button
+                  type="submit"
+                  className="w-full electric-glow"
                   disabled={loginMutation.isPending}
                 >
                   {loginMutation.isPending ? <Spinner size={16} className="mr-2 text-primary-foreground" /> : null}

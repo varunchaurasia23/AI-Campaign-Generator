@@ -1,4 +1,6 @@
 import { Router, type IRouter } from "express";
+import { createHash, timingSafeEqual } from "node:crypto";
+import rateLimit from "express-rate-limit";
 import { eq, desc, asc, count, avg, sql } from "drizzle-orm";
 import {
   db,
@@ -12,43 +14,111 @@ import {
   AdminGetCampaignParams,
 } from "@workspace/api-zod";
 import { requireAdmin } from "../middlewares/adminAuth";
+import { requireCsrf, setCsrfCookie } from "../middlewares/csrf";
 
 const router: IRouter = Router();
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
 /**
- * POST /api/admin/login
- * Compares password against ADMIN_PASSWORD env var (server-side only).
- * Sets session.isAdmin = true on success.
+ * Constant-time password comparison.
+ *
+ * Both strings are hashed with SHA-256 before comparison so that
+ * timingSafeEqual always receives equal-length buffers — it throws on
+ * length mismatch, which would otherwise leak information about the
+ * expected password length.
  */
-router.post("/admin/login", async (req, res): Promise<void> => {
-  const parsed = AdminLoginBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: "Password is required" });
-    return;
+function safeComparePasswords(candidate: string, expected: string): boolean {
+  const hashA = createHash("sha256").update(candidate).digest();
+  const hashB = createHash("sha256").update(expected).digest();
+  try {
+    return timingSafeEqual(hashA, hashB);
+  } catch {
+    return false;
   }
+}
 
-  const adminPassword = process.env.ADMIN_PASSWORD;
-  if (!adminPassword) {
-    req.log.error("ADMIN_PASSWORD env var is not set");
-    res.status(500).json({ error: "Admin authentication is not configured" });
-    return;
-  }
+// ─── Rate limiters ────────────────────────────────────────────────────────────
 
-  if (parsed.data.password !== adminPassword) {
-    req.log.warn({ ip: req.ip }, "Failed admin login attempt");
-    res.status(401).json({ error: "Invalid password" });
-    return;
-  }
+/**
+ * Admin login rate limit: max 5 *failed* attempts per IP per 15 minutes.
+ *
+ * `skipSuccessfulRequests: true` means HTTP 2xx responses are not counted,
+ * so a correct password never burns a slot.  A wrong password (401) or any
+ * other error (400, 500) is counted.
+ *
+ * This is intentionally separate from the campaign submission rate limiter.
+ */
+const adminLoginRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,   // 15-minute rolling window
+  max: 5,                       // 5 failed attempts before lockout
+  skipSuccessfulRequests: true, // successful logins (200) never counted
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { xForwardedForHeader: false },
+  message: {
+    error:
+      "Too many failed login attempts from this IP. " +
+      "Please wait 15 minutes before trying again.",
+  },
+});
 
-  req.session.isAdmin = true;
-  req.log.info({ ip: req.ip }, "Admin login successful");
-  res.json({ authenticated: true });
+// ─── Routes ───────────────────────────────────────────────────────────────────
+
+/**
+ * GET /api/admin/csrf
+ * Issues a signed CSRF cookie that the frontend must echo back as
+ * X-CSRF-Token on all state-changing admin requests.
+ * This endpoint is called by the login page before any POST.
+ */
+router.get("/admin/csrf", setCsrfCookie, (_req, res): void => {
+  res.json({ ok: true });
 });
 
 /**
- * POST /api/admin/logout
+ * POST /api/admin/login
+ *
+ * Protected by:
+ *  - CSRF token validation (requireCsrf)
+ *  - Per-IP rate limit on failures (adminLoginRateLimit) — checked after CSRF
+ *    so attackers cannot consume slots via CSRF-invalid requests
+ *  - Constant-time password comparison (safeComparePasswords)
  */
-router.post("/admin/logout", (req, res): void => {
+router.post(
+  "/admin/login",
+  requireCsrf,
+  adminLoginRateLimit,
+  async (req, res): Promise<void> => {
+    const parsed = AdminLoginBody.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Password is required" });
+      return;
+    }
+
+    const adminPassword = process.env.ADMIN_PASSWORD;
+    if (!adminPassword) {
+      req.log.error("ADMIN_PASSWORD env var is not set");
+      res.status(500).json({ error: "Admin authentication is not configured" });
+      return;
+    }
+
+    if (!safeComparePasswords(parsed.data.password, adminPassword)) {
+      req.log.warn({ ip: req.ip }, "Failed admin login attempt");
+      res.status(401).json({ error: "Invalid password" });
+      return;
+    }
+
+    req.session.isAdmin = true;
+    req.log.info({ ip: req.ip }, "Admin login successful");
+    res.json({ authenticated: true });
+  }
+);
+
+/**
+ * POST /api/admin/logout
+ * CSRF-protected to prevent forced logouts via cross-site request.
+ */
+router.post("/admin/logout", requireCsrf, (req, res): void => {
   req.session.destroy((err) => {
     if (err) {
       req.log.error({ err }, "Failed to destroy session");
@@ -60,8 +130,9 @@ router.post("/admin/logout", (req, res): void => {
 /**
  * GET /api/admin/me
  * Check if admin session is active (server-side session check).
+ * Also refreshes the CSRF cookie so it stays valid during an active session.
  */
-router.get("/admin/me", (req, res): void => {
+router.get("/admin/me", setCsrfCookie, (req, res): void => {
   if (req.session?.isAdmin) {
     res.json({ authenticated: true });
   } else {
@@ -96,12 +167,10 @@ router.get("/admin/campaigns", requireAdmin, async (req, res): Promise<void> => 
 
   const offset = (page - 1) * limit;
 
-  // Build base query joining campaigns + leads + results
   const baseConditions = statusFilter
     ? eq(campaignsTable.status, statusFilter)
     : undefined;
 
-  // Get total count
   const [countRow] = await db
     .select({ total: count() })
     .from(campaignsTable)
@@ -109,7 +178,6 @@ router.get("/admin/campaigns", requireAdmin, async (req, res): Promise<void> => 
 
   const total = countRow?.total ?? 0;
 
-  // Build order clause
   const orderClause = (() => {
     if (safeSortBy === "fitScore") {
       return safeOrder === "asc"
@@ -230,14 +298,12 @@ router.get("/admin/campaigns/:id", requireAdmin, async (req, res): Promise<void>
  * PROTECTED — requires active admin session.
  */
 router.get("/admin/stats", requireAdmin, async (req, res): Promise<void> => {
-  // Total submissions
   const [totalRow] = await db
     .select({ total: count() })
     .from(campaignsTable);
 
   const totalSubmissions = totalRow?.total ?? 0;
 
-  // Status breakdown
   const statusRows = await db
     .select({ status: campaignsTable.status, cnt: count() })
     .from(campaignsTable)
@@ -250,20 +316,16 @@ router.get("/admin/stats", requireAdmin, async (req, res): Promise<void> => {
     else if (row.status === "failed") statusBreakdown.failed = Number(row.cnt);
   }
 
-  // Completion rate
   const completionRate =
     totalSubmissions > 0
       ? Math.round((statusBreakdown.complete / totalSubmissions) * 1000) / 10
       : 0;
 
-  // Average budget
   const [avgRow] = await db
     .select({ avgBudget: avg(campaignsTable.budget) })
     .from(campaignsTable);
   const averageBudget = Math.round(Number(avgRow?.avgBudget ?? 0) * 100) / 100;
 
-  // Top channels (from campaign_results.channel_mix jsonb)
-  // We flatten the jsonb arrays and count channel occurrences
   const channelRows = await db.execute(sql`
     SELECT
       channel_value,
